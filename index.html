@@ -159,6 +159,19 @@ nav button.add svg{background:var(--acc);color:var(--acc-ink);border-radius:12px
 .welcome .logo{width:76px;height:76px;border-radius:20px;margin:0 auto 14px;display:block}
 .welcome h1{font-size:26px;font-weight:800;margin:0 0 8px}
 .welcome p{color:var(--muted);line-height:1.5;margin:0 auto 6px;max-width:34ch}
+.imp-row{display:grid;grid-template-columns:26px 1fr auto;gap:10px;align-items:start;padding:12px 0;border-bottom:1px solid var(--line)}
+.imp-row:last-child{border-bottom:0}
+.imp-row.off .imp-main,.imp-row.off .a{opacity:.45}
+.imp-row input[type=checkbox]{width:22px;height:22px;margin:2px 0 0;accent-color:var(--acc)}
+.imp-main{min-width:0;display:grid;gap:6px}
+.imp-main input,.imp-main select{width:100%;border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:15px;min-width:0}
+.imp-meta{font-size:12.5px;color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
+.tag{display:inline-block;font-size:11px;font-weight:800;border-radius:6px;padding:2px 6px;background:var(--soft);color:var(--ink)}
+.tag.warn{background:var(--warnbg);color:var(--warn)}
+.tag.ok{background:var(--soft);color:var(--acc)}
+.sumbox{display:grid;gap:6px;font-size:14px}
+.sumbox div{display:flex;justify-content:space-between;gap:8px}
+.sumbox b{white-space:nowrap}
 #toast{position:fixed;left:50%;bottom:calc(var(--nav) + 24px);transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:12px;font-weight:700;font-size:14px;opacity:0;transition:.2s;z-index:60;pointer-events:none;max-width:90vw;text-align:center}
 #toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 </style>
@@ -169,6 +182,8 @@ nav button.add svg{background:var(--acc);color:var(--acc-ink);border-radius:12px
 <div id="modal"><div class="sheet" id="sheet"></div></div>
 <div id="toast"></div>
 <input type="file" id="filein" accept=".json,application/json" style="display:none">
+<input type="file" id="pdfin" accept="application/pdf,.pdf" style="display:none">
+<script src="importador.js"></script>
 
 <script>
 "use strict";
@@ -233,6 +248,7 @@ function normalize(d) {
   if (!d.start) d.start = base.start;
   if (!d.created) d.created = today();
   if (typeof d.goal !== "number") d.goal = 0;
+  if (!d.rules || typeof d.rules !== "object") d.rules = {};
   d.v = 1;
   return d;
 }
@@ -397,7 +413,8 @@ SCREENS.cargar = () => {
       <div style="margin-top:18px"><button class="btn" data-act="saveInc">Guardar ingreso</button></div></div>`;
   }
   const cat = D.cats.find(c => c.name === S.cat) || { items: [] };
-  return `<h2 class="page">Cargar</h2>${seg}<div class="card">
+  return `<h2 class="page">Cargar</h2>${seg}
+    <button class="btn line" data-act="pickPdf" style="margin:8px 0 0">Importar resumen de tarjeta (PDF)</button><div class="card">
     <label class="f" style="margin-top:0">Monto</label><input class="inp money" id="fAmt" inputmode="decimal" placeholder="$ 0" autocomplete="off">
     <label class="f">Categoría</label><div class="chips" id="catChips">${D.cats.map(c => `<button class="chip ${c.name === S.cat ? "on" : ""}" data-act="pickCat" data-v="${esc(c.name)}">${esc(c.name)}</button>`).join("")}</div>
     <label class="f">¿En qué?</label><input class="inp" id="fCon" placeholder="Elegí uno o escribilo" autocomplete="off">
@@ -426,7 +443,7 @@ SCREENS.movs = () => {
     if (r.x.date !== last) { html += `<li class="dayh">${nice(r.x.date)}</li>`; last = r.x.date; }
     const e = r.x;
     html += r.k === "e"
-      ? `<li class="it click" data-act="editExp" data-id="${e.id}"><div class="main"><div class="t">${esc(e.concept)}${e.plan ? `<span class="badge">${e.cuota}</span>` : ""}</div><div class="s">${esc(e.cat)}</div></div><div class="a">${money(-e.amount, true)}</div></li>`
+      ? `<li class="it click" data-act="editExp" data-id="${e.id}"><div class="main"><div class="t">${esc(e.concept)}${e.plan ? `<span class="badge">${e.cuota}</span>` : ""}</div><div class="s">${esc(e.cat)}${e.card ? " · " + esc(e.card) : ""}${e.usd ? " · USD " + String(e.usd).replace(".", ",") : ""}</div></div><div class="a">${money(-e.amount, true)}</div></li>`
       : `<li class="it click" data-act="editInc" data-id="${e.id}"><div class="main"><div class="t">${esc(e.concept)}</div><div class="s">Ingreso</div></div><div class="a pos">${money(e.amount, true)}</div></li>`;
   }
   const tot = rows.reduce((a, r) => a + (r.k === "e" ? -r.x.amount : r.x.amount), 0);
@@ -468,6 +485,7 @@ SCREENS.resumen = () => {
 /* =================== Pantalla: Más =================== */
 SCREENS.mas = () => {
   const items = [
+    ["importar", I.xls.replace('M4 9h16M4 15h16M10 3v18', 'M7 8h10M7 12h10M7 16h6'), "Importar resumen de tarjeta", "PDF de Visa o Mastercard (Galicia)"],
     ["fijos", I.pin, "Gastos fijos", D.fixed.length + " fijos · se marcan como pagos cada mes"],
     ["cats", I.tags, "Categorías e ítems", D.cats.length + " categorías"],
     ["meta", I.goal, "Meta de ahorro", D.goal ? money(D.goal) : "Sin meta"],
@@ -481,6 +499,167 @@ SCREENS.mas = () => {
 };
 const backLink = `<button class="back" data-act="subBack">‹ Más</button>`;
 const SUBS = {};
+/* =================== Importar resumen de tarjeta =================== */
+const IMPA = {};
+// Categoría sugerida: 1) lo que ya aprendió  2) un gasto tuyo con ese nombre  3) palabras clave
+const KEYWORDS = [
+  [/IMPUESTOS TARJETA/, "Otro"], [/SUPERM|COTO|CARREFOUR|\bDIA\b|JUMBO|DISCO|\bVEA\b|CHANGOMAS|YAGUAR|MAXICONSUMO|DIARCO/, "Víveres"],
+  [/PEDIDOSYA|RAPPI|MCDONALD|KFC|BURGER|MOSTAZA|KENTUCKY|STARBUCKS|CAFE/, "Víveres"], [/MERCADOLIBRE/, "Víveres"],
+  [/FARMACITY|FARMACIA|FARM\b/, "Personal"], [/TELECENTRO|FIBERTEL|MOVISTAR|CLARO|TELECOM|PERSONAL FLOW|EDESUR|EDENOR|METROGAS|AYSA|NATURGY/, "Utilidades"],
+  [/YOUTUBE|NETFLIX|SPOTIFY|DISNEY|HBO|\bMAX\b|GOOGLE|STEAM|PRIME|PARAMOUNT/, "Personal"], [/APPLE/, "Víveres"],
+  [/UBER|CABIFY|DIDI|SUBE|YPF|SHELL|AXION|PEAJE|AUTOPISTA|ESTACIONAM/, "Transporte"],
+  [/NEWBALANCE|NIKE|ADIDAS|ZARA|DEXTER|GRIMOLDI|TIENDA/, "Personal"]
+];
+const catOr = name => catNames().includes(name) ? name : (catNames().includes("Otro") ? "Otro" : catNames()[0]);
+function guess(item) {
+  const r = D.rules[item.key];
+  if (r && catNames().includes(r.cat)) return { cat: r.cat, concept: r.concept || item.concept, how: "aprendido" };
+  const raw = norm(item.raw).replace(/[^a-z0-9 ]/g, " ");
+  const known = D.expenses.concat().reverse().find(e => { const n = norm(e.concept).replace(/[^a-z0-9 ]/g, " ").trim(); return n.length >= 4 && (" " + raw.replace(/\s+/g, "") + " ").includes(n.replace(/\s+/g, "")); });
+  if (known && !item.isTax) return { cat: known.cat, concept: known.concept, how: "como antes" };
+  const up = item.key + " " + item.raw.toUpperCase();
+  for (const [re, c] of KEYWORDS) if (re.test(up)) return { cat: catOr(c), concept: item.concept, how: "sugerido" };
+  return { cat: catOr("Otro"), concept: item.concept, how: "" };
+}
+const impKey = (tarjeta, it, k) => [tarjeta, it.comp || it.key, it.cuota ? k + "/" + it.cuota.n : it.date, it.cuota ? "" : it.amount].join("|");
+// Duplicado = mismo monto exacto (±$0,05), o monto parecido (±2%) y nombre parecido.
+const words = t => norm(t).replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(w => w.length >= 4 && !/^(merpago|pedidosya|tienda|moreno|direct)$/.test(w));
+function sameName(a, b) {
+  const A = words(a), B = words(b), jb = B.join("");
+  return A.some(w => B.includes(w) || jb.includes(w)) || B.some(w => A.join("").includes(w));
+}
+function isDup(e, amount, name) {
+  const d = Math.abs(e.amount - amount);
+  return d <= 0.05 || (d <= Math.max(1, amount * 0.02) && sameName(e.concept, name));
+}
+function findDup(ym, amount, excludeIds, name) {
+  return D.expenses.find(e => e.date.startsWith(ym) && !(excludeIds && excludeIds.has(e.id)) && !e.importKey && isDup(e, amount, name || ""));
+}
+async function loadPdfjs() {
+  if (window.pdfjsLib) return window.pdfjsLib;
+  const lib = await import("./pdf.min.mjs");
+  lib.GlobalWorkerOptions.workerSrc = new URL("pdf.worker.min.mjs", location.href).href;
+  window.pdfjsLib = lib; return lib;
+}
+async function readStatement(file) {
+  toast("Leyendo el resumen…");
+  let res;
+  try {
+    const lib = await loadPdfjs();
+    const lines = await Importador.extractLines(lib, new Uint8Array(await file.arrayBuffer()));
+    res = Importador.parseStatement(lines);
+  } catch (e) { return toast("No pude leer ese PDF. ¿Es un resumen de tarjeta?"); }
+  if (!res.items.length) return toast("No encontré consumos en ese PDF");
+  const vto = res.vencimiento || res.items[res.items.length - 1].date;
+  const usd = res.items.filter(i => i.currency === "USD").reduce((a, i) => a + i.amount, 0);
+  const rate = res.usdBase && usd ? Math.round(res.usdBase / usd * 100) / 100 : 0;
+  S.imp = { res, file: file.name, month: vto.slice(0, 7), day: vto.slice(8, 10), rate, rows: res.items.map(it => { const g = guess(it); return { it, cat: g.cat, concept: g.concept, how: g.how, sel: true, future: true }; }) };
+  markDups();
+  S.tab = "mas"; S.sub = "importar"; render(); window.scrollTo(0, 0);
+}
+function rowArs(r) { return r2(r.it.currency === "USD" ? r.it.amount * (S.imp.rate || 0) : r.it.amount); }
+function markDups() {
+  const I = S.imp, used = new Set();
+  for (const r of I.rows) {
+    r.dup = null; r.done = false;
+    const key = impKey(I.res.tarjeta, r.it, r.it.cuota ? r.it.cuota.k : 0);
+    const prev = D.expenses.find(e => e.importKey === key);
+    if (prev) { r.done = true; r.sel = false; r.dup = prev; continue; }
+    const amt = rowArs(r); if (!amt) continue;
+    const d = findDup(I.month, amt, used, r.it.raw + " " + r.concept);
+    if (d) { r.dup = d; r.sel = false; used.add(d.id); }
+  }
+}
+SUBS.importar = () => {
+  const I = S.imp;
+  if (!I) return `${backLink}<h2 class="page">Importar resumen</h2>
+    <div class="card help"><p>Subí el PDF del resumen de tu tarjeta (Visa o Mastercard del Galicia). La app lee cada consumo, le pone categoría, detecta cuotas y duplicados, y te muestra todo para revisar antes de guardar.</p>
+    <p class="muted">El PDF se procesa en este teléfono: no se sube a ningún lado.</p>
+    <div style="margin-top:14px"><button class="btn" data-act="pickPdf">Elegir PDF</button></div></div>`;
+  const hasUsd = I.rows.some(r => r.it.currency === "USD");
+  const sel = I.rows.filter(r => r.sel), tot = sel.reduce((a, r) => a + rowArs(r), 0);
+  const all = I.rows.reduce((a, r) => a + rowArs(r), 0);
+  const stTot = (I.res.totalPesos || 0) + (I.res.totalUsd || 0) * (I.rate || 0);
+  const okTotal = I.res.totalPesos != null && Math.abs(all - stTot) < 1;
+  const months = []; for (let k = -2; k <= 2; k++) months.push(addMonths(I.month.slice(0, 7), k));
+  const futN = sel.filter(r => r.it.cuota && r.it.cuota.k < r.it.cuota.n && r.future).reduce((a, r) => a + (r.it.cuota.n - r.it.cuota.k), 0);
+  const rows = I.rows.map((r, i) => {
+    const c = r.it.cuota, tags = [];
+    if (c) tags.push(`<span class="tag">cuota ${c.k}/${c.n}</span>`);
+    if (r.it.currency === "USD") tags.push(`<span class="tag">USD ${String(r.it.amount).replace(".", ",")}</span>`);
+    if (r.done) tags.push(`<span class="tag ok">ya importado</span>`);
+    else if (r.dup) tags.push(`<span class="tag warn">¿ya cargado? ${esc(r.dup.concept)} ${money(r.dup.amount, true)}</span>`);
+    if (r.how) tags.push(`<span>${r.how}</span>`);
+    return `<div class="imp-row ${r.sel ? "" : "off"}"><input type="checkbox" data-imp="sel" data-i="${i}" ${r.sel ? "checked" : ""} aria-label="Importar">
+      <div class="imp-main"><input id="ic-${i}" data-imp="concept" data-i="${i}" value="${esc(r.concept)}" aria-label="En qué">
+        <select id="it-${i}" data-imp="cat" data-i="${i}" aria-label="Categoría">${catOptions(r.cat)}</select>
+        <div class="imp-meta"><span>${dmy(r.it.date)}</span>${tags.join("")}</div>
+        ${c && c.k < c.n && r.sel ? `<label class="imp-meta"><input type="checkbox" data-imp="future" data-i="${i}" ${r.future ? "checked" : ""} style="width:18px;height:18px"> cargar las ${c.n - c.k} cuotas que faltan</label>` : ""}</div>
+      <div class="a">${money(rowArs(r), true)}</div></div>`;
+  }).join("");
+  return `${backLink}<h2 class="page">Importar resumen</h2>
+  <div class="card"><div class="ttl"><span>${esc(I.res.tarjeta)}${I.res.banco ? " · " + I.res.banco : ""}</span><small>vence ${I.res.vencimiento ? dmy(I.res.vencimiento) : "-"}</small></div>
+    <label class="f" style="margin-top:0">Cargar en el mes</label>
+    <select class="inp" id="impMonth" data-imp="month">${months.map(m => `<option value="${m}" ${m === I.month ? "selected" : ""}>${ymLabel(m)}</option>`).join("")}</select>
+    ${hasUsd ? `<label class="f">Dólar del resumen (para los consumos en USD)</label><input class="inp" id="impRate" data-imp="rate" inputmode="decimal" value="${I.rate || ""}" placeholder="$ por dólar">
+      <div class="hint">${I.res.usdBase ? "Calculado con las percepciones del resumen." : "Poné el valor del dólar con el que vas a pagar."}</div>` : ""}
+    <div class="sumbox" style="margin-top:14px">
+      <div><span>Total del resumen</span><b>${I.res.totalPesos != null ? money(I.res.totalPesos, true) + (I.res.totalUsd ? " + USD " + String(I.res.totalUsd).replace(".", ",") : "") : "-"}</b></div>
+      <div><span>Detectado en el PDF</span><b>${money(all, true)} ${okTotal ? '<span class="tag ok">coincide</span>' : (I.res.totalPesos != null ? '<span class="tag warn">revisar</span>' : "")}</b></div>
+      <div><span>Vas a importar (${sel.length})</span><b>${money(tot, true)}</b></div>
+      ${futN ? `<div><span>Cuotas futuras a cargar</span><b>${futN}</b></div>` : ""}
+    </div></div>
+  <div class="card">${rows}</div>
+  <div class="btns"><button class="btn soft" data-act="impCancel">Cancelar</button><button class="btn" data-act="impDo" ${sel.length ? "" : "disabled"}>Importar ${sel.length}</button></div>`;
+};
+function impEvent(e) {
+  const el = e.target.closest("[data-imp]"); if (!el || !S.imp) return;
+  const I = S.imp, k = el.dataset.imp, r = I.rows[Number(el.dataset.i)];
+  if (k === "sel") { r.sel = el.checked; }
+  else if (k === "future") { r.future = el.checked; }
+  else if (k === "concept") { r.concept = el.value; return; }
+  else if (k === "cat") { r.cat = el.value; r.how = ""; return; }
+  else if (k === "month") { I.month = el.value; I.rows.forEach(x => { if (!x.done) x.sel = true; }); markDups(); }
+  else if (k === "rate") { if (e.type !== "change") return; I.rate = parseNum(el.value) || 0; markDups(); }
+  const y = window.scrollY; render(); window.scrollTo(0, y);
+}
+document.addEventListener("change", impEvent);
+document.addEventListener("input", e => { if (e.target.dataset && (e.target.dataset.imp === "concept")) impEvent(e); });
+IMPA.pickPdf = () => document.getElementById("pdfin").click();
+document.getElementById("pdfin").addEventListener("change", e => { const f = e.target.files[0]; e.target.value = ""; if (f) readStatement(f); });
+IMPA.impCancel = () => { S.imp = null; S.sub = null; render(); };
+IMPA.impDo = () => {
+  const I = S.imp;
+  if (I.rows.some(r => r.sel && r.it.currency === "USD") && !(I.rate > 0)) return toast("Poné el valor del dólar");
+  const day = I.day || "01", base = I.month + "-" + day, ts = Date.now();
+  const [yy, mm] = I.month.split("-").map(Number), last = new Date(yy, mm, 0).getDate();
+  const date0 = I.month + "-" + pad(Math.min(Number(day), last));
+  let n = 0, f = 0;
+  const touched = new Set();
+  for (const r of I.rows) {
+    if (!r.sel) continue;
+    const it = r.it, amount = rowArs(r), c = it.cuota, concept = r.concept.trim() || it.concept;
+    const card = I.res.tarjeta;
+    const e = { id: uid(), ts: ts + n, date: date0, cat: r.cat, concept, amount, card, importKey: impKey(card, it, c ? c.k : 0), bought: it.date };
+    if (it.currency === "USD") e.usd = it.amount;
+    if (c) { e.cuota = c.k + "/" + c.n; e.plan = uid(); }
+    D.expenses.push(e); touched.add(e.id); n++;
+    if (!it.isTax) D.rules[it.key] = { cat: r.cat, concept };
+    if (c && c.k < c.n && r.future) {
+      for (let j = c.k + 1; j <= c.n; j++) {
+        const dt = shiftDate(date0, j - c.k), ym = dt.slice(0, 7), key = impKey(card, it, j);
+        if (D.expenses.some(x => x.importKey === key)) continue;
+        const dup = findDup(ym, amount, touched, it.raw + " " + concept);
+        if (dup) { dup.importKey = key; dup.cuota = dup.cuota || j + "/" + c.n; touched.add(dup.id); continue; }
+        D.expenses.push({ id: uid(), ts: ts + n + j, date: dt, cat: r.cat, concept, amount, card, importKey: key, plan: e.plan, cuota: j + "/" + c.n, bought: it.date });
+        f++;
+      }
+    }
+  }
+  Store.save();
+  const m = I.month; S.imp = null; S.sub = null; S.month = m; go("mes");
+  toast(`Importados ${n} gastos${f ? ` y ${f} cuotas futuras` : ""}`);
+};
 SUBS.fijos = () => `${backLink}<h2 class="page">Gastos fijos</h2>
   <div class="card"><div class="hint" style="margin:0 0 6px">Son los gastos que se repiten todos los meses. En la pantalla del mes aparecen como pendientes hasta que los pagás.</div>
   <ul class="list">${D.fixed.map(f => `<li class="it click" data-act="editFixed" data-id="${f.id}"><div class="main"><div class="t">${esc(f.name)}</div><div class="s">${esc(f.cat)}</div></div><div class="a">${money(f.amount, true)}</div></li>`).join("") || `<div class="empty">No hay gastos fijos.</div>`}</ul>
@@ -514,6 +693,7 @@ SUBS.ayuda = () => `${backLink}<h2 class="page">Cómo se usa</h2>
   <p><b>Gastos fijos.</b> Alquiler, expensas, luz, etc. Aparecen como pendientes cada mes: tocá <b>Pagar</b>, ajustá el monto si cambió y listo.</p>
   <p><b>Cargar.</b> Monto, categoría y en qué. Los ítems de cada categoría aparecen como atajos.</p>
   <p><b>Cuotas.</b> Marcá "En cuotas", poné el monto de cada cuota y cuántas son: se cargan solas en los meses siguientes. Si ya venías pagando, indicá en qué cuota vas.</p>
+  <p><b>Resumen de tarjeta.</b> En Cargar o en Más, tocá "Importar resumen de tarjeta" y elegí el PDF. Revisás la lista (categoría, cuotas, posibles duplicados) y confirmás. La app aprende: la próxima vez cada comercio va solo a la categoría que elegiste.</p>
   <p><b>Corregir.</b> En Movimientos tocá cualquier gasto o ingreso para cambiarlo o borrarlo.</p>
   <p class="muted">La app funciona sin internet y no manda tus datos a ningún lado.</p></div>`;
 
@@ -791,6 +971,8 @@ function buildXlsx() {
   ].concat(sheets.map((s, i) => [`xl/worksheets/sheet${i + 1}.xml`, sheetXml(s[1], s[2])]));
   return b64(zip(files));
 }
+
+Object.assign(ACT, IMPA);
 
 /* =================== PIN =================== */
 const getPin = () => { try { return localStorage.getItem("gm-pin") || ""; } catch (e) { return ""; } };
